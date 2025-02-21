@@ -5,10 +5,10 @@ from scipy.interpolate import griddata
 nu = 0.3
 E = 210000.0
 
-RectHeight = float(input("Input the height of the rectangle structure [mm]: "))
-RectLength = float(input("Input the length of the rectangle structure [mm]: "))
+RectHeight = float(input("Input the height of the rectangle structure [m]: "))
+RectLength = float(input("Input the length of the rectangle structure [m]: "))
 Force = float(input("Input single force's magnitude in [N]: "))
-MaterialThickness = float(input("Input the thickness of the material [mm]: "))
+MaterialThickness = float(input("Input the thickness of the material [m]: "))
 
 ForceXComp = float(input("The X coordinate of the force on the beam: "))
 while (ForceXComp < 0 or ForceXComp > RectLength):
@@ -65,9 +65,9 @@ b2E2 = LocalNodeY3E2 - LocalNodeY1E2
 b3E2 = LocalNodeY1E2 - LocalNodeY2E2
 
 # Note: Following the MATLAB code (which uses Element 1's g-values)
-g1E2 = LocalNodeX3E1 - LocalNodeX2E1
-g2E2 = LocalNodeX1E1 - LocalNodeX3E1
-g3E2 = LocalNodeX2E1 - LocalNodeX1E1
+g1E2 = LocalNodeX3E2 - LocalNodeX2E2
+g2E2 = LocalNodeX1E2 - LocalNodeX3E2
+g3E2 = LocalNodeX2E2 - LocalNodeX1E2
 
 StrainDisplacementMat2 = (1 / (2 * Area1)) * np.array([
     [b1E2,      0, b2E2,      0, b3E2,      0],
@@ -143,7 +143,7 @@ print(Sigma2)
 # -------------------------------
 # Stress-Strain Plot with Polynomial Fit for Both Elements
 # -------------------------------
-PolynomialDegree = 3 
+PolynomialDegree = 2
 
 PolynomialFit1 = np.polyfit(Epsilon1, Sigma1, PolynomialDegree)
 PolynomialFit2 = np.polyfit(Epsilon2, Sigma2, PolynomialDegree)
