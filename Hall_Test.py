@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 T1 = 1100  # Initial temperature (K)
 T2 = 550   # Final temperature (K)
 gamma = 1.25
+beta = 1.50
 
 # Generate temperature range for visualization
 T_values = np.linspace(T1, T2, 100)
