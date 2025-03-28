@@ -40,7 +40,7 @@ class FEAGUI(tk.Tk):
         # ------------------ Left Section ------------------
         tk.Label(left_frame, text="Mesh Conversion & Material Selection", bg="white",
                  fg="black", font=("Helvetica", 14, "bold")).pack(pady=10)
-        tk.Label(left_frame, text="Mesh File (STL/OBJ):", bg="white", fg="black", font=("Helvetica", 12)).pack(anchor=tk.W)
+        tk.Label(left_frame, text="Mesh File (STL):", bg="white", fg="black", font=("Helvetica", 12)).pack(anchor=tk.W)
         self.mesh_path_var = tk.StringVar()
         mesh_frame = tk.Frame(left_frame, bg="white")
         mesh_frame.pack(fill=tk.X, pady=5)
@@ -112,7 +112,7 @@ class FEAGUI(tk.Tk):
     def browse_mesh_file(self):
         filename = filedialog.askopenfilename(
             title="Select Mesh File",
-            filetypes=[("STL files", "*.stl"), ("OBJ files", "*.obj"), ("All files", "*.*")]
+            filetypes=[("STL files", "*.stl"), ("All files", "*.*")]
         )
         if filename:
             self.mesh_path_var.set(filename)
