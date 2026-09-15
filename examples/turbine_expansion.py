@@ -1,17 +1,10 @@
 import numpy as np
-
-print ("hello SE300")
-Name = "SE300"
-print(Name) 
-
-import numpy as np
 import matplotlib.pyplot as plt
 
 # Given data for turbine expansion process
 T1 = 1100  # Initial temperature (K)
 T2 = 550   # Final temperature (K)
 gamma = 1.25
-beta = 1.50
 
 # Generate temperature range for visualization
 T_values = np.linspace(T1, T2, 100)

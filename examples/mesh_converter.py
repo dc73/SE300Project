@@ -15,7 +15,6 @@
 import tkinter as tk
 from tkinter import simpledialog, filedialog
 import trimesh
-import numpy as np
 
 def convert_mesh_to_fea(input_filename, output_filename): 
 

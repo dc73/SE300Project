@@ -5,13 +5,13 @@ import matplotlib
 matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from mpl_toolkits.mplot3d import Axes3D
 import io
-import sys
+from contextlib import redirect_stdout
+from pathlib import Path
 
-from fea_computation import FEAComputation
-from fea_data import FEAData
-from fea_io import FEAIO
+from fea import io as fea_io
+from fea.computation import run_analysis
+from fea.materials import MATERIALS
 
 class FEAGUI(tk.Tk):
     """Main GUI application class for FEA Software."""
@@ -20,11 +20,6 @@ class FEAGUI(tk.Tk):
         self.configure(bg="white")
         self.title("FEA Software")
         self.geometry("1800x800")
-        
-        # Initialize supporting classes
-        self.io = FEAIO()
-        self.computation = FEAComputation()
-        self.data_storage = FEAData()
         
         self.analysis_results = None  # (node_coords, element_data, results)
         self.create_widgets()
@@ -49,8 +44,7 @@ class FEAGUI(tk.Tk):
         tk.Button(mesh_frame, text="Browse", command=self.browse_mesh_file, bg="white", fg="black").pack(side=tk.LEFT)
         tk.Label(left_frame, text="Select Material:", bg="white", fg="black", font=("Helvetica", 12)).pack(anchor=tk.W, pady=(10, 0))
         self.material_var = tk.StringVar()
-        materials = ["Aluminum 6061", "Titanium Ti-6Al-4V", "Carbon Fiber Composite",
-                     "Stainless Steel 304", "Inconel 718", "Mild Steel", "Copper", "Brass"]
+        materials = list(MATERIALS)
         self.material_dropdown = ttk.Combobox(left_frame, textvariable=self.material_var,
                                               values=materials, state="readonly", width=40)
         self.material_dropdown.pack(pady=5)
@@ -118,19 +112,9 @@ class FEAGUI(tk.Tk):
             self.mesh_path_var.set(filename)
     
     def update_material_properties(self, event=None):
-        materials = {
-            "Aluminum 6061": {"E": 68900000000.0, "Poisson": 0.33, "Density": 2700.0},
-            "Titanium Ti-6Al-4V": {"E": 113800000000.0, "Poisson": 0.342, "Density": 4430.0},
-            "Carbon Fiber Composite": {"E": 181000000000.0, "Poisson": 0.30, "Density": 1600.0},
-            "Stainless Steel 304": {"E": 193000000000.0, "Poisson": 0.29, "Density": 7900.0},
-            "Inconel 718": {"E": 179000000000.0, "Poisson": 0.31, "Density": 8190.0},
-            "Mild Steel": {"E": 210e9, "Poisson": 0.3, "Density": 7850},
-            "Copper": {"E": 110e9, "Poisson": 0.34, "Density": 8960},
-            "Brass": {"E": 100e9, "Poisson": 0.34, "Density": 8500}
-        }
         material = self.material_var.get()
-        if material in materials:
-            props = materials[material]
+        if material in MATERIALS:
+            props = MATERIALS[material]
             self.e_var.set(f"{props['E']:.2e}")
             self.poisson_var.set(str(props['Poisson']))
             self.density_var.set(str(props['Density']))
@@ -143,12 +127,13 @@ class FEAGUI(tk.Tk):
             messagebox.showerror("Error", "Please select a material!")
             return
         try:
-            mesh = trimesh.load(self.mesh_path_var.get())
+            mesh = trimesh.load_mesh(self.mesh_path_var.get())
+            if not hasattr(mesh, "vertices") or not len(mesh.vertices):
+                raise ValueError("The selected file does not contain a usable mesh.")
             vertices = mesh.vertices
             nodes2d = vertices[:, :2]
-            node_list = []
-            for i, coord in enumerate(nodes2d):
-                node_list.append((i + 1, coord[0], coord[1]))
+            node_list = [(i, coord[0], coord[1])
+                         for i, coord in enumerate(nodes2d, start=1)]
             faces = mesh.faces
             element_list = []
             for i, face in enumerate(faces):
@@ -157,18 +142,10 @@ class FEAGUI(tk.Tk):
                     element_list.append((i + 1, face[0] + 1, face[1] + 1, face[2] + 1, face[2] + 1))
                 elif len(face) == 4:
                     element_list.append((i + 1, face[0] + 1, face[1] + 1, face[2] + 1, face[3] + 1))
-            materials = {
-                "Aluminum 6061": {"E": 68900000000.0, "Poisson": 0.33, "Density": 2700.0},
-                "Titanium Ti-6Al-4V": {"E": 113800000000.0, "Poisson": 0.342, "Density": 4430.0},
-                "Carbon Fiber Composite": {"E": 181000000000.0, "Poisson": 0.30, "Density": 1600.0},
-                "Stainless Steel 304": {"E": 193000000000.0, "Poisson": 0.29, "Density": 7900.0},
-                "Inconel 718": {"E": 179000000000.0, "Poisson": 0.31, "Density": 8190.0},
-                "Mild Steel": {"E": 210e9, "Poisson": 0.3, "Density": 7850},
-                "Copper": {"E": 110e9, "Poisson": 0.34, "Density": 8960},
-                "Brass": {"E": 100e9, "Poisson": 0.34, "Density": 8500}
-            }
-            material_props = materials[self.material_var.get()]
-            Analysis_Type = 1 if self.analysis_type_var.get() == "Plane Stress" else 2
+            if not element_list:
+                raise ValueError("The mesh contains no triangular or quadrilateral faces.")
+            material_props = MATERIALS[self.material_var.get()]
+            analysis_type = 1 if self.analysis_type_var.get() == "Plane Stress" else 2
             max_node_id = max(node[0] for node in node_list)
             bc_list = [(nid, 1, 1) for nid in range(1, min(14, max_node_id + 1))]
             load_list = []
@@ -177,10 +154,14 @@ class FEAGUI(tk.Tk):
                 force_value = float(self.force_value_var.get())
                 if 1 <= force_node <= max_node_id:
                     load_list.append((force_node, force_value, 1))
-            except:
-                pass
-            if self.io.write_conversion_file(node_list, element_list, bc_list, load_list,
-                                             material_props, Analysis_Type):
+            except ValueError:
+                messagebox.showerror("Error", "Force node and force must be valid numbers.")
+                return
+            if not 1 <= force_node <= max_node_id:
+                messagebox.showerror("Error", f"Force node must be between 1 and {max_node_id}.")
+                return
+            if fea_io.write_conversion_file(node_list, element_list, bc_list, load_list,
+                                            material_props, analysis_type):
                 messagebox.showinfo("Success", "Mesh conversion complete! 'INPUT_FEA_PROTUS_3.txt' has been written.")
             else:
                 messagebox.showerror("Error", "Failed to write conversion file.")
@@ -189,9 +170,8 @@ class FEAGUI(tk.Tk):
     
     def export_conversion(self):
         try:
-            with open("INPUT_FEA_PROTUS_3.txt", "r") as f:
-                data = f.read()
-        except Exception as e:
+            data = Path("INPUT_FEA_PROTUS_3.txt").read_text(encoding="utf-8")
+        except OSError as e:
             messagebox.showerror("Error", f"Could not read conversion file: {str(e)}")
             return
         save_path = filedialog.asksaveasfilename(title="Export Conversion File",
@@ -199,27 +179,22 @@ class FEAGUI(tk.Tk):
                                                  filetypes=[("Text files", "*.txt"), ("All files", "*.*")])
         if save_path:
             try:
-                with open(save_path, "w") as f:
-                    f.write(data)
+                Path(save_path).write_text(data, encoding="utf-8")
                 messagebox.showinfo("Success", f"Conversion file exported to:\n{save_path}")
-            except Exception as e:
+            except OSError as e:
                 messagebox.showerror("Error", f"Error saving file: {str(e)}")
     
     def run_analysis(self):
         self.log_text.delete("1.0", tk.END)
         for widget in self.vis_frame.winfo_children():
             widget.destroy()
-        old_stdout = sys.stdout
-        sys.stdout = io.StringIO()
-        node_coords, element_data, results = FEAComputation.run_analysis()
-        output = sys.stdout.getvalue()
-        sys.stdout = old_stdout
+        output_buffer = io.StringIO()
+        with redirect_stdout(output_buffer):
+            node_coords, element_data, results = run_analysis()
+        output = output_buffer.getvalue()
         self.log_text.insert(tk.END, output)
         if node_coords is not None:
             self.analysis_results = (node_coords, element_data, results)
-            self.data_storage.node_coords = node_coords
-            self.data_storage.element_data = element_data
-            self.data_storage.results = results
         else:
             self.analysis_results = None
     
@@ -237,7 +212,7 @@ class FEAGUI(tk.Tk):
                                                  defaultextension=".json",
                                                  filetypes=[("JSON files", "*.json"), ("All files", "*.*")])
         if save_path:
-            if self.io.export_file(export_data, save_path):
+            if fea_io.export_file(export_data, save_path):
                 messagebox.showinfo("Success", f"Results exported to:\n{save_path}")
             else:
                 messagebox.showerror("Error", "Error saving results.")
@@ -246,15 +221,12 @@ class FEAGUI(tk.Tk):
         load_path = filedialog.askopenfilename(title="Load Old Results File",
                                                filetypes=[("JSON files", "*.json"), ("All files", "*.*")])
         if load_path:
-            data = self.io.load_file(load_path)
+            data = fea_io.load_file(load_path)
             if data:
                 node_coords = [tuple(coord) for coord in data.get("node_coords", [])]
                 element_data = data.get("element_data", [])
                 results = data.get("results", {})
                 self.analysis_results = (node_coords, element_data, results)
-                self.data_storage.node_coords = node_coords
-                self.data_storage.element_data = element_data
-                self.data_storage.results = results
                 messagebox.showinfo("Success", "Old results loaded successfully!")
             else:
                 messagebox.showerror("Error", "Error loading results.")
@@ -330,9 +302,9 @@ class FEAGUI(tk.Tk):
         ax.xaxis.set_tick_params(colors='white')
         ax.yaxis.set_tick_params(colors='white')
         ax.zaxis.set_tick_params(colors='white')
-        ax.w_xaxis.line.set_color('white')
-        ax.w_yaxis.line.set_color('white')
-        ax.w_zaxis.line.set_color('white')
+        ax.xaxis.line.set_color('white')
+        ax.yaxis.line.set_color('white')
+        ax.zaxis.line.set_color('white')
         cbar = fig.colorbar(sc, ax=ax, pad=0.1)
         cbar.ax.yaxis.set_tick_params(color='white')
         cbar.outline.set_edgecolor('white')
@@ -344,6 +316,10 @@ class FEAGUI(tk.Tk):
         widget.pack(fill=tk.BOTH, expand=True)
         return canvas
 
-if __name__ == "__main__":
+def main():
     app = FEAGUI()
     app.mainloop()
+
+
+if __name__ == "__main__":
+    main()
