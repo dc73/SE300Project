@@ -12,6 +12,7 @@ from pathlib import Path
 from fea import io as fea_io
 from fea.computation import run_analysis
 from fea.materials import MATERIALS
+from fea.mesh import build_mesh_data
 
 class FEAGUI(tk.Tk):
     """Main GUI application class for FEA Software."""
@@ -128,26 +129,12 @@ class FEAGUI(tk.Tk):
             return
         try:
             mesh = trimesh.load_mesh(self.mesh_path_var.get())
-            if not hasattr(mesh, "vertices") or not len(mesh.vertices):
+            if not hasattr(mesh, "vertices"):
                 raise ValueError("The selected file does not contain a usable mesh.")
-            vertices = mesh.vertices
-            nodes2d = vertices[:, :2]
-            node_list = [(i, coord[0], coord[1])
-                         for i, coord in enumerate(nodes2d, start=1)]
-            faces = mesh.faces
-            element_list = []
-            for i, face in enumerate(faces):
-                face = list(face)
-                if len(face) == 3:
-                    element_list.append((i + 1, face[0] + 1, face[1] + 1, face[2] + 1, face[2] + 1))
-                elif len(face) == 4:
-                    element_list.append((i + 1, face[0] + 1, face[1] + 1, face[2] + 1, face[3] + 1))
-            if not element_list:
-                raise ValueError("The mesh contains no triangular or quadrilateral faces.")
+            node_list, element_list, bc_list = build_mesh_data(mesh.vertices, mesh.faces)
             material_props = MATERIALS[self.material_var.get()]
             analysis_type = 1 if self.analysis_type_var.get() == "Plane Stress" else 2
             max_node_id = max(node[0] for node in node_list)
-            bc_list = [(nid, 1, 1) for nid in range(1, min(14, max_node_id + 1))]
             load_list = []
             try:
                 force_node = int(self.force_node_var.get())

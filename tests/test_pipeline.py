@@ -4,9 +4,25 @@ from pathlib import Path
 
 from fea.computation import run_analysis
 from fea.io import export_file, load_file, write_conversion_file
+from fea.mesh import build_mesh_data
 
 
 class PipelineTest(unittest.TestCase):
+    def test_plate_meshes_fix_only_the_left_edge(self):
+        plate = [(5, -5, 0), (-5, 5, 0), (-5, -5, 0), (5, 5, 0)]
+        faces = [(0, 1, 2), (3, 1, 0)]
+        nodes, elements, constraints = build_mesh_data(plate, faces)
+
+        self.assertEqual(len(nodes), 4)
+        self.assertEqual(len(elements), 2)
+        self.assertEqual(constraints, [(2, 1, 1), (3, 1, 1)])
+
+        plate_with_hole = [(-.1, .1, 0), (.1, .1, 0), (-.5, .5, 0),
+                           (-.5, -.5, 0), (-.1, -.1, 0), (.5, -.5, 0),
+                           (.1, -.1, 0), (.5, .5, 0)]
+        _, _, constraints = build_mesh_data(plate_with_hole, faces)
+        self.assertEqual(constraints, [(3, 1, 1), (4, 1, 1)])
+
     def test_conversion_round_trip(self):
         with tempfile.TemporaryDirectory() as directory:
             input_path = Path(directory) / "input.txt"
